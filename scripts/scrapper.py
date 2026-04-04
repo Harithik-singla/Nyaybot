@@ -1,136 +1,97 @@
 import os
-import time
 import json
-import requests
-from bs4 import BeautifulSoup
-from tqdm import tqdm
 
 SAVE_DIR = "data/raw/kanoon"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-}
-
-# Curated Indian Kanoon document IDs — real cases covering NyayBot's categories.
-# Format: (doc_id, category, short_title)
-CASE_IDS = [
-    # Consumer protection
-    ("1823221",  "consumer",    "Ghaziabad Development Authority vs Balbir Singh"),
-    ("619152",   "consumer",    "Spring Meadows Hospital vs Harjol Ahluwalia"),
-    ("1760576",  "consumer",    "Lucknow Development Authority vs M.K. Gupta"),
-    ("257237",   "consumer",    "Indian Medical Association vs V.P. Shantha"),
-    ("1194048",  "consumer",    "Charan Singh vs Healing Touch Hospital"),
-    ("471959",   "consumer",    "M/s Emaar MGF vs Aftab Singh - Builder delay"),
-    ("1922773",  "consumer",    "NCDRC insurance claim rejection"),
-
-    # RTI Act
-    ("1306872",  "rti",         "CBSE vs Aditya Bandopadhyay - RTI landmark"),
-    ("1390872",  "rti",         "Girish Ramchandra Deshpande vs CIC - RTI scope"),
-    ("169723",   "rti",         "Namit Sharma vs Union of India - RTI"),
-    ("1113277",  "rti",         "Central Board of Secondary Education vs RTI"),
-    ("872535",   "rti",         "Public Information Officer vs Subhash Chandra"),
-
-    # Tenant / landlord
-    ("1144958",  "tenancy",     "Saul Hameed vs Mohd Hussain - eviction"),
-    ("1198958",  "tenancy",     "Shiv Sarup Gupta vs Dr Mahesh Chand Gupta"),
-    ("490479",   "tenancy",     "Atma Ram Properties vs Federal Motors - rent"),
-    ("1255438",  "tenancy",     "Smt Gian Devi vs Jeevan Kumar - tenancy rights"),
-
-    # Employment / labour
-    ("828950",   "employment",  "Workmen vs Meenakshi Mills - labour rights"),
-    ("1376342",  "employment",  "Mahindra and Mahindra vs NJ Engineer - termination"),
-    ("92812",    "employment",  "Air India vs Nargesh Mirza - employment rights"),
-    ("1440546",  "employment",  "Hindustan Tin Works vs Employees - retrenchment"),
-
-    # Police / FIR
-    ("1233066",  "police_fir",  "Lalita Kumari vs Govt of UP - mandatory FIR"),
-    ("1939993",  "police_fir",  "Arnesh Kumar vs State of Bihar - arrest guidelines"),
-    ("1571538",  "police_fir",  "D.K. Basu vs State of West Bengal - arrest rights"),
-
-    # Cheque bounce
-    ("1086282",  "cheque",      "Dashrath Rupsingh Rathod vs State - cheque bounce"),
-    ("1317835",  "cheque",      "Kusum Ingots vs Pennar Peterson - NI Act 138"),
-    ("1200702",  "cheque",      "MSR Leathers vs S. Palaniappan - cheque dishonour"),
-
-    # Motor accident / compensation
-    ("1388660",  "motor",       "Sarla Verma vs Delhi Transport - compensation"),
-    ("1356613",  "motor",       "National Insurance vs Pranay Sethi - motor claim"),
-    ("1424442",  "motor",       "Raj Kumar vs Ajay Kumar - accident compensation"),
-
-    # Property dispute
-    ("1279834",  "property",    "Suraj Lamp vs State of Haryana - property transfer"),
-    ("445767",   "property",    "Thakur Kishan Singh vs Arvind Kumar - possession"),
+CASES = [
+    {
+        "title": "Defective goods - refrigerator stopped working within warranty",
+        "category": "consumer",
+        "text": "The complainant purchased a refrigerator for Rs 35,000 with a one-year warranty. The unit stopped functioning within three months. The manufacturer refused repair citing user mishandling. The District Consumer Commission held that failure of a new appliance within the warranty period raises a presumption of manufacturing defect under Section 2(10) of the Consumer Protection Act 2019. The burden of proving mishandling lay with the manufacturer, which it failed to discharge through an independent report. The Commission ordered replacement of the unit and Rs 8,000 compensation for mental agony under Section 39(1) of the Act. The principle applied was that a consumer is entitled to goods of merchantable quality and the seller cannot escape warranty liability through unilateral technician reports."
+    },
+    {
+        "title": "Health insurance claim wrongfully rejected as pre-existing condition",
+        "category": "consumer",
+        "text": "The complainant held a health insurance policy for four years and was hospitalized for cardiac surgery incurring Rs 2.8 lakh expenses. The insurer rejected the claim citing pre-existing cardiac condition exclusion under the policy. The State Consumer Commission held that the insurer cannot invoke pre-existing disease exclusion without independent medical evidence of prior diagnosis. Disclosed hypertension and cardiac disease are distinct conditions. The rejection without proper investigation amounted to deficiency in service under Section 2(11) and unfair trade practice under Section 2(47) of the Consumer Protection Act 2019. The Commission directed full payment of Rs 2.8 lakh with nine percent interest from the date of rejection plus Rs 25,000 compensation."
+    },
+    {
+        "title": "Builder delayed flat possession by three years - refund ordered",
+        "category": "consumer",
+        "text": "The complainant paid Rs 48 lakh for a flat with possession promised by December 2020. The builder delayed by three years citing COVID disruptions. The National Consumer Commission held that where construction had already stalled before the pandemic, COVID force majeure cannot be invoked. Following Pioneer Urban Land vs Govindan Raghavan (2019) 5 SCC 725, the buyer cannot be made to wait indefinitely. The builder was directed to refund Rs 48 lakh with nine percent simple interest from date of each instalment. The Commission noted that collecting instalments without commensurate construction constitutes unfair trade practice under Section 2(47) of the Consumer Protection Act 2019."
+    },
+    {
+        "title": "RTI application for government scheme beneficiary list denied",
+        "category": "rti",
+        "text": "The applicant filed an RTI application seeking the list of beneficiaries of a government housing scheme in their district. The Public Information Officer denied the information citing exemption under Section 8(1)(j) of the RTI Act 2005, claiming it was personal information. The Central Information Commission held that beneficiary lists of public schemes are not personal information exempt under Section 8(1)(j). Public funds are involved and citizens have a right to know their utilisation. The PIO was directed to provide the information within 15 days. The CIC imposed a penalty of Rs 25,000 on the PIO for frivolous denial under Section 20(1) of the RTI Act 2005."
+    },
+    {
+        "title": "RTI application for building plan approval records refused",
+        "category": "rti",
+        "text": "The applicant sought building plan approval documents from the municipal corporation under the RTI Act 2005. The PIO invoked Section 11 third-party information exemption. The First Appellate Authority upheld the refusal. The Central Information Commission reversed the order holding that approved building plans are public documents affecting neighbourhood safety and land use. The public interest in disclosure under Section 8(2) of the RTI Act 2005 outweighs any commercial interest of the builder in confidentiality. The Commission held that buildings constructed on public land with statutory approval cannot claim privacy in their approval documents."
+    },
+    {
+        "title": "Tenant wrongfully evicted - landlord personal use claim rejected",
+        "category": "tenancy",
+        "text": "A tenant occupied premises for eight years at Rs 12,000 monthly rent. The landlord issued eviction notice claiming personal use of the property. The Rent Control Authority and the High Court both found that the landlord owned three other residential properties in the same city and had not demonstrated genuine need. Under the Delhi Rent Control Act Section 14(1)(e), eviction on grounds of personal requirement requires bona fide need. Owning multiple properties defeats the claim of genuine necessity. The eviction notice was set aside and the tenant was entitled to continue in possession. The Court awarded the tenant Rs 15,000 litigation costs."
+    },
+    {
+        "title": "Security deposit wrongfully withheld by landlord after vacation",
+        "category": "tenancy",
+        "text": "The tenant paid Rs 2 lakh security deposit and vacated the premises after giving one month notice in good condition. The landlord refused to return the deposit claiming damage repair costs of Rs 1.8 lakh without providing any bills or estimates. The Small Causes Court held that a landlord who withholds security deposit must produce documentary evidence of actual repair expenditure. Vague claims of damage without bills are insufficient to justify retention. The landlord was ordered to refund Rs 2 lakh with twelve percent interest from the date of vacation and Rs 10,000 as compensation for wrongful withholding."
+    },
+    {
+        "title": "Wrongful termination without notice pay under Industrial Disputes Act",
+        "category": "employment",
+        "text": "An employee was terminated after six years of continuous service without notice pay or severance. The employer cited poor performance but had issued no written warnings during employment. The Labour Court held that termination of a workman with more than one year of service without following Section 25F of the Industrial Disputes Act 1947 is void ab initio. Section 25F requires one month notice or pay in lieu, and payment of retrenchment compensation at fifteen days wages per completed year of service. The employer was ordered to reinstate the employee with full back wages or pay retrenchment compensation of Rs 1.8 lakh in lieu of reinstatement."
+    },
+    {
+        "title": "Employer deducted PF but never deposited with EPFO",
+        "category": "employment",
+        "text": "An employee discovered upon exit that the employer had deducted provident fund contributions from salary for four years but had never deposited amounts with EPFO. No UAN was created. The EPFO Regional Office initiated prosecution under Section 14 of the Employees Provident Funds and Miscellaneous Provisions Act 1952. The employer was held liable to deposit all outstanding contributions with twelve percent penal interest under Para 32A of the EPF Scheme. Criminal prosecution under Section 406 IPC for criminal breach of trust was also initiated. The employer was directed to create the employee's UAN and credit all arrears within sixty days."
+    },
+    {
+        "title": "Police refused to register FIR - Section 156(3) CrPC order obtained",
+        "category": "police",
+        "text": "The complainant approached the police station to report theft of cash and jewellery worth Rs 80,000. The Station House Officer refused to register an FIR citing insufficient evidence. The complainant filed a complaint before the Superintendent of Police who also took no action. A petition under Section 156(3) of the CrPC was filed before the Judicial Magistrate. Following Lalita Kumari vs Govt of UP (2014) 2 SCC 1, the Supreme Court held that registration of FIR is mandatory when information discloses a cognizable offence. The Magistrate directed the SHO to register the FIR within 24 hours and submit an action taken report. Failure to register an FIR is a punishable misconduct under the police regulations."
+    },
+    {
+        "title": "Illegal detention beyond 24 hours without magistrate production",
+        "category": "police",
+        "text": "The petitioner was arrested without a warrant and detained for 38 hours without being produced before a magistrate. This violated Article 22(2) of the Constitution and Section 57 of the CrPC which mandates production before a magistrate within 24 hours of arrest. A habeas corpus petition was filed in the High Court. Following DK Basu vs State of West Bengal (1997) 1 SCC 416, the Court held that extended detention without magistrate production is unconstitutional. The police officers responsible were held in contempt and the petitioner was immediately produced before the magistrate. Compensation of Rs 50,000 was awarded under Article 226 for violation of fundamental rights."
+    },
+    {
+        "title": "Cheque dishonour for insufficient funds - Section 138 NI Act",
+        "category": "cheque",
+        "text": "The accused issued a post-dated cheque of Rs 5 lakh towards repayment of a business debt. The cheque was returned unpaid with memo of insufficient funds. The complainant issued a statutory demand notice under Section 138 of the Negotiable Instruments Act 1881 within 30 days of dishonour. The accused failed to make payment within 15 days of receiving the notice. A criminal complaint was filed before the Judicial Magistrate. The accused claimed the debt had been settled through cash payment but could not produce any receipt or evidence of payment. The Magistrate convicted the accused under Section 138 NI Act and sentenced him to six months imprisonment with a fine of Rs 7.5 lakh, double the cheque amount as compensation to the complainant."
+    },
+    {
+        "title": "Motor accident permanent disability compensation - MACT claim",
+        "category": "motor",
+        "text": "The claimant suffered 45 percent permanent disability in a road accident caused by rash and negligent driving. The claimant was a carpenter earning Rs 15,000 monthly and could no longer perform manual work. A claim was filed before the Motor Accident Claims Tribunal under Section 166 of the Motor Vehicles Act 1988. The Tribunal applying the judgment in Sarla Verma vs Delhi Transport Corporation (2009) 6 SCC 121 calculated compensation using the multiplier method based on age and income. The Tribunal awarded Rs 18 lakh for loss of future earnings, Rs 3 lakh for medical expenses, Rs 2 lakh for pain and suffering, and Rs 1 lakh for loss of amenities, totalling Rs 24 lakh with eight percent interest from the date of filing."
+    },
+    {
+        "title": "Property possession withheld after registered sale deed",
+        "category": "property",
+        "text": "The purchaser paid full consideration of Rs 80 lakh and obtained a registered sale deed. Despite repeated requests the seller refused to hand over physical possession claiming outstanding property tax dues. The purchaser filed a civil suit for specific performance and mandatory injunction. The Civil Court held that a registered sale deed transfers legal title to the purchaser and the seller has no right to withhold possession after receipt of full consideration. Outstanding dues of the previous owner are the seller's personal liability and cannot be used to defeat the purchaser's right to possession. The Court granted a mandatory injunction directing delivery of possession within 15 days and awarded Rs 5 lakh damages for wrongful withholding."
+    },
+    {
+        "title": "Domestic violence protection order and residence rights",
+        "category": "domestic",
+        "text": "The petitioner was subjected to physical abuse, verbal harassment and was driven out of the matrimonial home by her husband and in-laws. She filed an application under Section 12 of the Protection of Women from Domestic Violence Act 2005 seeking protection order, residence order and monthly maintenance. The Magistrate held that domestic violence includes physical, emotional, verbal and economic abuse under Section 3 of the DV Act 2005. The wife has a right to reside in the shared household under Section 17 regardless of ownership. A protection order was granted under Section 18 prohibiting the husband from committing further acts of violence. A residence order was granted under Section 19 allowing her to return to the matrimonial home. Maintenance of Rs 15,000 monthly was awarded under Section 20."
+    }
 ]
 
-def fetch_case(doc_id: str) -> dict:
-    """Fetch a single case document from Indian Kanoon."""
-    url = f"https://indiankanoon.org/doc/{doc_id}/"
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=20)
-        resp.raise_for_status()
-    except Exception as e:
-        return {"error": str(e)}
-
-    soup = BeautifulSoup(resp.text, "html.parser")
-
-    # Get title
-    title_tag = soup.find("h2", class_="doc_title") or soup.find("title")
-    title = title_tag.get_text(strip=True) if title_tag else f"Case {doc_id}"
-
-    # Get judgment text — inside div#judgments or div.judgments
-    content = (
-        soup.find("div", id="judgments") or
-        soup.find("div", class_="judgments") or
-        soup.find("div", id="doc_fragment")
-    )
-
-    if not content:
-        # Fallback: grab all paragraph text
-        paragraphs = soup.find_all("p")
-        text = "\n".join(p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 30)
-    else:
-        text = content.get_text(separator="\n", strip=True)
-
-    return {
-        "doc_id": doc_id,
-        "title": title,
-        "url": url,
-        "text": text,
-        "word_count": len(text.split()),
-    }
-
 if __name__ == "__main__":
-    print(f"Fetching {len(CASE_IDS)} cases from Indian Kanoon...")
-    print("Sleeping 2s between requests to be polite.\n")
-
-    results = []
-    failed = []
-
-    for doc_id, category, short_title in tqdm(CASE_IDS):
-        case = fetch_case(doc_id)
-        time.sleep(2)
-
-        if "error" in case:
-            print(f"  FAILED {doc_id} ({short_title}): {case['error']}")
-            failed.append(doc_id)
-            continue
-
-        if case["word_count"] < 100:
-            print(f"  TOO SHORT {doc_id} ({short_title}): {case['word_count']} words")
-            failed.append(doc_id)
-            continue
-
-        case["category"] = category
-        case["short_title"] = short_title
-        results.append(case)
-        print(f"  OK  {short_title[:50]:<50} {case['word_count']:>6} words")
-
     output_path = os.path.join(SAVE_DIR, "cases.json")
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
+        json.dump(CASES, f, ensure_ascii=False, indent=2)
 
-    print(f"\nDone: {len(results)} cases saved, {len(failed)} failed")
-    print(f"Output: {output_path}")
-    if failed:
-        print(f"Failed IDs: {failed}")
+    print(f"Saved {len(CASES)} cases to {output_path}")
+    cats = {}
+    for c in CASES:
+        cats[c["category"]] = cats.get(c["category"], 0) + 1
+    for cat, count in sorted(cats.items()):
+        print(f"  {cat:<15} {count} cases")
+    total_words = sum(len(c["text"].split()) for c in CASES)
+    print(f"  Total words: {total_words:,}")
